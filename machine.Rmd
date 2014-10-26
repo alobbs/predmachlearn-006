@@ -1,0 +1,228 @@
+---
+title: "Practical Machine Learning - Project"
+author: "Alvaro Lopez Ortega"
+date: "26 Oct 2014"
+output: html_document
+---
+
+# Practical Machine Learning Course Project
+
+#### Load libraries and setup working directory
+````{r, eval=FALSE}
+library(caret)
+trainingRaw <- read.csv(file="pml-training.csv", header=TRUE, as.is=TRUE,
+                        stringsAsFactors=FALSE, sep=',', na.strings=c('NA','','#DIV/0!'))
+testingRaw  <- read.csv(file="pml-testing.csv",  header=TRUE, as.is=TRUE,
+                        stringsAsFactors=FALSE, sep=',', na.strings=c('NA','','#DIV/0!'))
+trainingRaw$classe <- as.factor(trainingRaw$classe)  
+````
+
+#### Examine the data
+This is how data used in this exercise looks like:
+```
+## 'data.frame':  19622 obs. of  160 variables:
+##  $ X                       : chr  "1" "2" "3" "4" ...
+##  $ raw_timestamp_part_2    : int  788290 808298 820366 120339 196328 304277 368296 440390 484323 484434 ...
+##  $ cvtd_timestamp          : chr  "05/12/2011 11:23" "05/12/2011 11:23" "05/12/2011 11:23" "05/12/2011 11:23" ...
+##  $ new_window              : chr  "no" "no" "no" "no" ...
+##  $ num_window              : int  11 11 11 12 12 12 12 12 12 12 ...
+##  $ roll_belt               : num  1.41 1.41 1.42 1.48 1.48 1.45 1.42 1.42 1.43 1.45 ...
+##  $ pitch_belt              : num  8.07 8.07 8.07 8.05 8.07 8.06 8.09 8.13 8.16 8.17 ...
+##  $ yaw_belt                : num  -94.4 -94.4 -94.4 -94.4 -94.4 -94.4 -94.4 -94.4 -94.4 -94.4 ...
+##  $ total_accel_belt        : int  3 3 3 3 3 3 3 3 3 3 ...
+##  $ kurtosis_roll_belt      : chr  "" "" "" "" ...
+##  $ max_picth_belt          : int  NA NA NA NA NA NA NA NA NA NA ...
+##  $ var_yaw_belt            : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ gyros_belt_x            : num  0 0.02 0 0.02 0.02 0.02 0.02 0.02 0.02 0.03 ...
+##  $ gyros_belt_y            : num  0 0 0 0 0.02 0 0 0 0 0 ...
+##  $ gyros_belt_z            : num  -0.02 -0.02 -0.02 -0.03 -0.02 -0.02 -0.02 -0.02 -0.02 0 ...
+##  $ accel_belt_x            : int  -21 -22 -20 -22 -21 -21 -22 -22 -20 -21 ...
+##  $ accel_belt_y            : int  4 4 5 3 2 4 3 4 2 4 ...
+##  $ accel_belt_z            : int  22 22 23 21 24 21 21 21 24 22 ...
+##  $ magnet_belt_x           : int  -3 -7 -2 -6 -6 0 -4 -2 1 -3 ...
+##  $ magnet_belt_y           : int  599 608 600 604 600 603 599 603 602 609 ...
+##  $ yaw_arm                 : num  -161 -161 -161 -161 -161 -161 -161 -161 -161 -161 ...
+##  $ total_accel_arm         : int  34 34 34 34 34 34 34 34 34 34 ...
+##  $ var_accel_arm           : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ avg_roll_arm            : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ gyros_arm_x             : num  0 0.02 0.02 0.02 0 0.02 0 0.02 0.02 0.02 ...
+##  $ accel_arm_x             : int  -288 -290 -289 -289 -289 -289 -289 -289 -288 -288 ...
+##  $ accel_arm_y             : int  109 110 110 111 111 111 111 111 109 110 ...
+##  $ accel_arm_z             : int  -123 -125 -126 -123 -123 -122 -125 -124 -122 -124 ...
+##  $ magnet_arm_z            : int  516 513 513 512 506 513 509 510 518 516 ...
+##  $ skewness_yaw_arm        : chr  "" "" "" "" ...
+##  $ max_roll_arm            : num  NA NA NA NA NA NA NA NA NA NA ...
+##  $ amplitude_yaw_arm       : int  NA NA NA NA NA NA NA NA NA NA ...
+##  $ roll_dumbbell           : num  13.1 13.1 12.9 13.4 13.4 ...
+##  $ pitch_dumbbell          : num  -70.5 -70.6 -70.3 -70.4 -70.4 ...
+##  $ skewness_yaw_dumbbell   : chr  "" "" "" "" ...
+##  $ max_roll_dumbbell       : num  NA NA NA NA NA NA NA NA NA NA ...
+##   [list output truncated]
+```
+
+#### Cleaning variables
+Clearly there are manyNA or useless or empty values of variables for the prediction. The prediction should only be computed on the accelerometers values of belt, forearm, arm and dumbell. So, the non-accelerometer measures are discard with the useless variables.
+
+````{r, eval=FALSE}
+NAindex <- apply(trainingRaw,2,function(x) {sum(is.na(x))}) 
+trainingRaw <- trainingRaw[,which(NAindex == 0)]
+NAindex <- apply(testingRaw,2,function(x) {sum(is.na(x))}) 
+testingRaw <- testingRaw[,which(NAindex == 0)]
+````
+
+#### Preprocessing variables
+````{r, eval=FALSE}
+
+v <- which(lapply(trainingRaw, class) %in% "numeric")
+
+preObj <-preProcess(trainingRaw[,v],method=c('knnImpute', 'center', 'scale'))
+trainLess1 <- predict(preObj, trainingRaw[,v])
+trainLess1$classe <- trainingRaw$classe
+
+testLess1 <-predict(preObj,testingRaw[,v])
+````
+
+#### Removing the non zero variables
+Let's get rid of the variables with either zero value or a value near zero. Those entrues don't contain relevan information for the predictions:
+
+````{r, eval=FALSE}
+nzv <- nearZeroVar(trainLess1,saveMetrics=TRUE)
+trainLess1 <- trainLess1[,nzv$nzv==FALSE]
+
+nzv <- nearZeroVar(testLess1,saveMetrics=TRUE)
+testLess1 <- testLess1[,nzv$nzv==FALSE]
+````
+
+#### Create cross validation set
+At this stage, set is divided in two parts. The first one for training, and the other for validation
+
+````{r, eval=FALSE}
+set.seed(12031987)
+
+inTrain = createDataPartition(trainLess1$classe, p = 3/4, list=FALSE)
+training = trainLess1[inTrain,]
+crossValidation = trainLess1[-inTrain,]
+````
+
+#### Train model
+
+Train model with random forest due to its highly accuracy rate. The model is build on a training set of 28 variables from the initial 160. Cross validation is used as train control method.
+````{r, eval=FALSE}
+modFit <- train(classe ~., method="rf", data=train, trControl=trainControl(method='cv'), number=5, allowParallel=TRUE )
+
+````
+````
+## Time difference of 13.05325 mins
+
+## Random Forest 
+## 
+## 14718 samples
+##    27 predictors
+##     5 classes: 'A', 'B', 'C', 'D', 'E' 
+## 
+## No pre-processing
+## Resampling: Cross-Validated (10 fold) 
+## 
+## Summary of sample sizes: 13246, 13245, 13248, 13245, 13247, 13246, ... 
+## 
+## Resampling results across tuning parameters:
+## 
+##   mtry  Accuracy  Kappa  Accuracy SD  Kappa SD
+##   2     0.993     0.991  0.00116      0.00147 
+##   14    0.992     0.99   0.0028       0.00354 
+##   27    0.989     0.987  0.00353      0.00446 
+## 
+## Accuracy was used to select the optimal model using  the largest value.
+## The final value used for the model was mtry = 2.  
+````
+
+#### Accuracy on training set and cross validation set
+Now it's time to measure the accuracy of trainig.
+
+Training set:
+````{r, eval=FALSE}
+trainingPred <- predict(modFit, training)
+confusionMatrix(trainingPred, training$classe)
+````
+````
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 4185    0    0    0    0
+         B    0 2848    0    0    0
+         C    0    0 2567    0    0
+         D    0    0    0 2412    0
+         E    0    0    0    0 2706
+
+Overall Statistics
+                                     
+               Accuracy : 1          
+                 95% CI : (0.9997, 1)
+    No Information Rate : 0.2843     
+    P-Value [Acc > NIR] : < 2.2e-16  
+                                     
+                  Kappa : 1          
+ Mcnemar's Test P-Value : NA         
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            1.0000   1.0000   1.0000   1.0000   1.0000
+Specificity            1.0000   1.0000   1.0000   1.0000   1.0000
+Pos Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
+Neg Pred Value         1.0000   1.0000   1.0000   1.0000   1.0000
+Prevalence             0.2843   0.1935   0.1744   0.1639   0.1839
+Detection Rate         0.2843   0.1935   0.1744   0.1639   0.1839
+Detection Prevalence   0.2843   0.1935   0.1744   0.1639   0.1839
+Balanced Accuracy      1.0000   1.0000   1.0000   1.0000   1.0000
+````
+
+Cross validation set
+````{r, eval=FALSE}
+cvPred <- predict(modFit, crossValidation)
+confusionMatrix(cvPred, crossValidation$classe)
+````
+````
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    A    B    C    D    E
+         A 1392    3    0    0    0
+         B    2  944    2    0    0
+         C    0    2  852    3    0
+         D    0    0    1  801    3
+         E    1    0    0    0  898
+
+Overall Statistics
+                                         
+               Accuracy : 0.9965         
+                 95% CI : (0.9945, 0.998)
+    No Information Rate : 0.2845         
+    P-Value [Acc > NIR] : < 2.2e-16      
+                                         
+                  Kappa : 0.9956         
+ Mcnemar's Test P-Value : NA             
+
+Statistics by Class:
+
+                     Class: A Class: B Class: C Class: D Class: E
+Sensitivity            0.9978   0.9947   0.9965   0.9963   0.9967
+Specificity            0.9991   0.9990   0.9988   0.9990   0.9998
+Pos Pred Value         0.9978   0.9958   0.9942   0.9950   0.9989
+Neg Pred Value         0.9991   0.9987   0.9993   0.9993   0.9993
+Prevalence             0.2845   0.1935   0.1743   0.1639   0.1837
+Detection Rate         0.2838   0.1925   0.1737   0.1633   0.1831
+Detection Prevalence   0.2845   0.1933   0.1748   0.1642   0.1833
+Balanced Accuracy      0.9985   0.9969   0.9976   0.9976   0.9982
+````
+
+#### Final Resulst
+Predictions on the real testing set are
+````{r, eval=FALSE}
+testingPred <- predict(modFit, testLess1)
+testingPred
+````
+````
+ [1] B A B A A E D B A A B C B A E E A B B B
+````
