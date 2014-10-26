@@ -1,10 +1,3 @@
-# Clean up
-rm(list = ls(all = TRUE))
-
-#Setting the working directory
-#setwd('/media/nicolo/Data/Coursera/PracticalMachineLearning/Data/PracticalMachineLearning')
-setwd("D:\\Coursera\\PracticalMachineLearning\\Data\\PracticalMachineLearning\\data")
-
 # Loading the caret library
 library(caret)
 
@@ -24,9 +17,9 @@ testingRaw <- read.csv(file="pml-testing.csv", header=TRUE, as.is = TRUE, string
 trainingRaw$classe <- as.factor(trainingRaw$classe)
 
 #Removing NAs
-NAindex <- apply(trainingRaw,2,function(x) {sum(is.na(x))}) 
+NAindex <- apply(trainingRaw,2,function(x) {sum(is.na(x))})
 trainingRaw <- trainingRaw[,which(NAindex == 0)]
-NAindex <- apply(testingRaw,2,function(x) {sum(is.na(x))}) 
+NAindex <- apply(testingRaw,2,function(x) {sum(is.na(x))})
 testingRaw <- testingRaw[,which(NAindex == 0)]
 
 #Preprocess
